@@ -29,13 +29,13 @@ def create_default_config():
     print(f"Config will be saved to: {config_path}")
     print()
 
-    # Prompt for API key
-    api_key = input("Enter your API key: ").strip()
-
     # Prompt for base URL with default
     base_url = input(f"Enter API base URL [{DEFAULT_BASE_URL}]: ").strip()
     if not base_url:
         base_url = DEFAULT_BASE_URL
+
+    # Prompt for API key
+    api_key = input("Enter your API key: ").strip()
 
     # Prompt for model with default
     model = input(f"Enter model name [{DEFAULT_MODEL}]: ").strip()
@@ -76,17 +76,33 @@ def load_config():
 def get_client():
     """Initialize client from config."""
     config = load_config()
-    api_config = config.get('api', {})
-
-    api_key = api_config.get('key', '')
-    base_url = api_config.get('base_url', DEFAULT_BASE_URL)
-
-    if not api_key:
-        print("Error: No API key found in config", file=sys.stderr)
-        print(f"Set key in config file: {get_config_path()}", file=sys.stderr)
+    
+    if 'api' not in config:
+        print("Error: Invalid config file - missing 'api' section", file=sys.stderr)
+        print(f"Config file: {get_config_path()}", file=sys.stderr)
+        print("Delete the config file to recreate it", file=sys.stderr)
         sys.exit(1)
+    
+    api_config = config['api']
+    required_fields = ['base_url', 'key', 'model']
+    
+    for field in required_fields:
+        if field not in api_config:
+            print(f"Error: Missing required field '{field}' in config", file=sys.stderr)
+            print(f"Config file: {get_config_path()}", file=sys.stderr)
+            print("Delete the config file to recreate it", file=sys.stderr)
+            sys.exit(1)
+        
+        if not api_config[field]:
+            print(f"Error: Empty value for required field '{field}' in config", file=sys.stderr)
+            print(f"Config file: {get_config_path()}", file=sys.stderr)
+            sys.exit(1)
 
-    return OpenAI(api_key=api_key, base_url=base_url), api_config.get('model', DEFAULT_MODEL)
+    base_url = api_config['base_url']
+    api_key = api_config['key']
+    model = api_config['model']
+
+    return OpenAI(api_key=api_key, base_url=base_url), model
 
 
 def generate_shell_command(client, model, description):
