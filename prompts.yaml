@@ -9,3 +9,11 @@ system_prompt: |
 
 description_prompt: |
   You are a linux and cybersecurity expert. Provide a concice one-line description of the command.
+
+lookup_prompt: lookup the command based on description
+
+explain_prompt: explaint he command
+
+safety_prompt: say whether the command is safe or unsafe
+
+question_prompt: ony do this if the user prompt ends in a ?

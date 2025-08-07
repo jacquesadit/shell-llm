@@ -88,6 +88,11 @@ def create_default_config():
             'base_url': base_url,
             'key': api_key,
             'model': model
+        },
+        'network': {
+            'proxy': None,
+            'ca_cert_path': None,
+            'ssl_verify': True
         }
     }
 
@@ -148,10 +153,16 @@ def get_client():
     system_prompt = prompts_config.get('system_prompt', 'You are a helpful assistant that converts natural language to shell commands.')
     description_prompt = prompts_config.get('description_prompt', 'Analyze the safety of this shell command.')
 
-    return api_key, base_url, model, system_prompt, description_prompt
+    # Load optional network configuration
+    network_config = config.get('network', {})
+    proxy = network_config.get('proxy')
+    ca_cert_path = network_config.get('ca_cert_path')
+    ssl_verify = network_config.get('ssl_verify', True)
+
+    return api_key, base_url, model, system_prompt, description_prompt, proxy, ca_cert_path, ssl_verify
 
 
-def generate_shell_command(api_key, base_url, model, system_prompt, description):
+def generate_shell_command(api_key, base_url, model, system_prompt, description, proxy=None, ca_cert_path=None, ssl_verify=True):
     """Generate shell command from natural language description."""
 
     try:
@@ -170,7 +181,16 @@ def generate_shell_command(api_key, base_url, model, system_prompt, description)
             "temperature": 0.1
         }
 
-        response = requests.post(url, headers=headers, json=data)
+        # Build request kwargs with optional network configurations
+        request_kwargs = {}
+        if proxy:
+            request_kwargs['proxies'] = {'http': proxy, 'https': proxy}
+        if ca_cert_path:
+            request_kwargs['verify'] = ca_cert_path
+        elif not ssl_verify:
+            request_kwargs['verify'] = False
+
+        response = requests.post(url, headers=headers, json=data, **request_kwargs)
         response.raise_for_status()
 
         result = response.json()
@@ -182,7 +202,7 @@ def generate_shell_command(api_key, base_url, model, system_prompt, description)
         sys.exit(1)
 
 
-def describe_shell_command(api_key, base_url, model, description_prompt, command):
+def describe_shell_command(api_key, base_url, model, description_prompt, command, proxy=None, ca_cert_path=None, ssl_verify=True):
     """Describe the generated shell command."""
 
     try:
@@ -201,7 +221,16 @@ def describe_shell_command(api_key, base_url, model, description_prompt, command
             "temperature": 0.1
         }
 
-        response = requests.post(url, headers=headers, json=data)
+        # Build request kwargs with optional network configurations
+        request_kwargs = {}
+        if proxy:
+            request_kwargs['proxies'] = {'http': proxy, 'https': proxy}
+        if ca_cert_path:
+            request_kwargs['verify'] = ca_cert_path
+        elif not ssl_verify:
+            request_kwargs['verify'] = False
+
+        response = requests.post(url, headers=headers, json=data, **request_kwargs)
         response.raise_for_status()
 
         result = response.json()
@@ -239,16 +268,16 @@ def main():
     args = parser.parse_args()
 
     # Initialize client
-    api_key, base_url, model, system_prompt, description_prompt = get_client()
+    api_key, base_url, model, system_prompt, description_prompt, proxy, ca_cert_path, ssl_verify = get_client()
 
     # Generate command
-    command = generate_shell_command(api_key, base_url, model, system_prompt, args.description)
+    command = generate_shell_command(api_key, base_url, model, system_prompt, args.description, proxy, ca_cert_path, ssl_verify)
 
     # Output the command
     print(command)
 
     # Describe the shell command
-    description = describe_shell_command(api_key, base_url, model, description_prompt, command)
+    description = describe_shell_command(api_key, base_url, model, description_prompt, command, proxy, ca_cert_path, ssl_verify)
     print(description)
 
 
