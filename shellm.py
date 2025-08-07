@@ -5,6 +5,7 @@ shellm - Natural language to shell command CLI tool
 
 import argparse
 import sys
+import shutil
 from pathlib import Path
 import yaml
 from platformdirs import user_config_dir
@@ -18,6 +19,38 @@ def get_config_path():
     """Get path to config file."""
     config_dir = user_config_dir("shellm")
     return Path(config_dir) / "config.yaml"
+
+
+def get_prompts_path():
+    """Get path to prompts file."""
+    config_dir = user_config_dir("shellm")
+    return Path(config_dir) / "prompts.yaml"
+
+
+def ensure_prompts_file():
+    """Ensure prompts.yaml exists in config directory, copy from project if needed."""
+    prompts_path = get_prompts_path()
+    
+    if not prompts_path.exists():
+        # Copy default prompts.yaml from project directory
+        default_prompts_path = Path(__file__).parent / "prompts.yaml"
+        if default_prompts_path.exists():
+            prompts_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(default_prompts_path, prompts_path)
+    
+    return prompts_path
+
+
+def load_prompts():
+    """Load prompts from config directory."""
+    prompts_path = ensure_prompts_file()
+    
+    try:
+        with open(prompts_path, 'r') as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        print(f"Error loading prompts: {e}", file=sys.stderr)
+        return {}
 
 
 def create_default_config():
@@ -76,23 +109,23 @@ def load_config():
 def get_client():
     """Initialize client from config."""
     config = load_config()
-    
+
     if 'api' not in config:
         print("Error: Invalid config file - missing 'api' section", file=sys.stderr)
         print(f"Config file: {get_config_path()}", file=sys.stderr)
         print("Delete the config file to recreate it", file=sys.stderr)
         sys.exit(1)
-    
+
     api_config = config['api']
-    required_fields = ['base_url', 'key', 'model']
-    
-    for field in required_fields:
+    api_required_fields = ['base_url', 'key', 'model']
+
+    for field in api_required_fields:
         if field not in api_config:
             print(f"Error: Missing required field '{field}' in config", file=sys.stderr)
             print(f"Config file: {get_config_path()}", file=sys.stderr)
             print("Delete the config file to recreate it", file=sys.stderr)
             sys.exit(1)
-        
+
         if not api_config[field]:
             print(f"Error: Empty value for required field '{field}' in config", file=sys.stderr)
             print(f"Config file: {get_config_path()}", file=sys.stderr)
@@ -102,19 +135,15 @@ def get_client():
     api_key = api_config['key']
     model = api_config['model']
 
-    return OpenAI(api_key=api_key, base_url=base_url), model
+    # Load system prompt from prompts file
+    prompts_config = load_prompts()
+    system_prompt = prompts_config.get('system_prompt', 'You are a helpful assistant that converts natural language to shell commands.')
+
+    return OpenAI(api_key=api_key, base_url=base_url), model, system_prompt
 
 
-def generate_shell_command(client, model, description):
+def generate_shell_command(client, model, system_prompt, description):
     """Generate shell command from natural language description."""
-    system_prompt = """You are a Linux shell command assistant. Convert natural language descriptions into shell commands.
-
-Rules:
-- Return ONLY the shell command, no explanations
-- Use common Linux utilities and commands
-- Prefer safe, standard commands
-- If multiple commands are needed, separate with && or ;
-- Don't include dangerous commands like rm -rf / without clear intent"""
 
     try:
         response = client.chat.completions.create(
@@ -161,10 +190,10 @@ def main():
     args = parser.parse_args()
 
     # Initialize client
-    client, model = get_client()
+    client, model, system_prompt = get_client()
 
     # Generate command
-    command = generate_shell_command(client, model, args.description)
+    command = generate_shell_command(client, model, system_prompt, args.description)
 
     # Output the command
     print(command)
