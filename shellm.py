@@ -27,30 +27,37 @@ def get_prompts_path():
     return Path(config_dir) / "prompts.yaml"
 
 
-def ensure_prompts_file():
-    """Ensure prompts.yaml exists in config directory, copy from project if needed."""
+def copy_default_prompts():
+    """Copy default prompts.yaml from project directory to config directory."""
     prompts_path = get_prompts_path()
+    prompts_path.parent.mkdir(parents=True, exist_ok=True)
     
-    if not prompts_path.exists():
-        # Copy default prompts.yaml from project directory
-        default_prompts_path = Path(__file__).parent / "prompts.yaml"
-        if default_prompts_path.exists():
-            prompts_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(default_prompts_path, prompts_path)
+    # Copy default prompts.yaml from project directory
+    default_prompts_path = Path(__file__).parent / "prompts.yaml"
+    if default_prompts_path.exists():
+        shutil.copy2(default_prompts_path, prompts_path)
+        
+        # Load and return the copied prompts
+        with open(prompts_path, 'r') as f:
+            return yaml.safe_load(f)
     
-    return prompts_path
+    # Fallback if source file doesn't exist
+    return {'system_prompt': 'You are a helpful assistant that converts natural language to shell commands.'}
 
 
 def load_prompts():
     """Load prompts from config directory."""
-    prompts_path = ensure_prompts_file()
+    prompts_path = get_prompts_path()
+    
+    if not prompts_path.exists():
+        return copy_default_prompts()
     
     try:
         with open(prompts_path, 'r') as f:
             return yaml.safe_load(f)
     except Exception as e:
         print(f"Error loading prompts: {e}", file=sys.stderr)
-        return {}
+        return copy_default_prompts()
 
 
 def create_default_config():
