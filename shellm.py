@@ -9,7 +9,8 @@ import shutil
 from pathlib import Path
 import yaml
 from platformdirs import user_config_dir
-from openai import OpenAI
+import requests
+import json
 
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_MODEL = "gpt-3.5-turbo"
@@ -147,46 +148,64 @@ def get_client():
     system_prompt = prompts_config.get('system_prompt', 'You are a helpful assistant that converts natural language to shell commands.')
     description_prompt = prompts_config.get('description_prompt', 'Analyze the safety of this shell command.')
 
-    return OpenAI(api_key=api_key, base_url=base_url), model, system_prompt, description_prompt
+    return api_key, base_url, model, system_prompt, description_prompt
 
 
-def generate_shell_command(client, model, system_prompt, description):
+def generate_shell_command(api_key, base_url, model, system_prompt, description):
     """Generate shell command from natural language description."""
 
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
+        url = f"{base_url}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": model,
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": description}
             ],
-            max_tokens=200,
-            temperature=0.1
-        )
+            "max_tokens": 200,
+            "temperature": 0.1
+        }
 
-        command = response.choices[0].message.content.strip()
+        response = requests.post(url, headers=headers, json=data)
+        response.raise_for_status()
+
+        result = response.json()
+        command = result["choices"][0]["message"]["content"].strip()
         return command
 
     except Exception as e:
-        print(f"Error calling OpenAI API: {e}", file=sys.stderr)
+        print(f"Error calling API: {e}", file=sys.stderr)
         sys.exit(1)
 
 
-def describe_shell_command(client, model, description_prompt, command):
+def describe_shell_command(api_key, base_url, model, description_prompt, command):
     """Describe the generated shell command."""
 
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
+        url = f"{base_url}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": model,
+            "messages": [
                 {"role": "system", "content": description_prompt},
                 {"role": "user", "content": f"Analyze this shell command: {command}"}
             ],
-            max_tokens=150,
-            temperature=0.1
-        )
+            "max_tokens": 150,
+            "temperature": 0.1
+        }
 
-        assessment = response.choices[0].message.content.strip()
+        response = requests.post(url, headers=headers, json=data)
+        response.raise_for_status()
+
+        result = response.json()
+        assessment = result["choices"][0]["message"]["content"].strip()
         return assessment
 
     except Exception as e:
@@ -220,16 +239,16 @@ def main():
     args = parser.parse_args()
 
     # Initialize client
-    client, model, system_prompt, description_prompt = get_client()
+    api_key, base_url, model, system_prompt, description_prompt = get_client()
 
     # Generate command
-    command = generate_shell_command(client, model, system_prompt, args.description)
+    command = generate_shell_command(api_key, base_url, model, system_prompt, args.description)
 
     # Output the command
     print(command)
 
     # Describe the shell command
-    description = describe_shell_command(client, model, description_prompt, command)
+    description = describe_shell_command(api_key, base_url, model, description_prompt, command)
     print(description)
 
 
