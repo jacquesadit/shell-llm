@@ -31,16 +31,16 @@ def copy_default_prompts():
     """Copy default prompts.yaml from project directory to config directory."""
     prompts_path = get_prompts_path()
     prompts_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Copy default prompts.yaml from project directory
     default_prompts_path = Path(__file__).parent / "prompts.yaml"
     if default_prompts_path.exists():
         shutil.copy2(default_prompts_path, prompts_path)
-        
+
         # Load and return the copied prompts
         with open(prompts_path, 'r') as f:
             return yaml.safe_load(f)
-    
+
     # Fallback if source file doesn't exist
     return {'system_prompt': 'You are a helpful assistant that converts natural language to shell commands.'}
 
@@ -48,10 +48,10 @@ def copy_default_prompts():
 def load_prompts():
     """Load prompts from config directory."""
     prompts_path = get_prompts_path()
-    
+
     if not prompts_path.exists():
         return copy_default_prompts()
-    
+
     try:
         with open(prompts_path, 'r') as f:
             return yaml.safe_load(f)
@@ -145,8 +145,9 @@ def get_client():
     # Load system prompt from prompts file
     prompts_config = load_prompts()
     system_prompt = prompts_config.get('system_prompt', 'You are a helpful assistant that converts natural language to shell commands.')
+    description_prompt = prompts_config.get('description_prompt', 'Analyze the safety of this shell command.')
 
-    return OpenAI(api_key=api_key, base_url=base_url), model, system_prompt
+    return OpenAI(api_key=api_key, base_url=base_url), model, system_prompt, description_prompt
 
 
 def generate_shell_command(client, model, system_prompt, description):
@@ -169,6 +170,28 @@ def generate_shell_command(client, model, system_prompt, description):
     except Exception as e:
         print(f"Error calling OpenAI API: {e}", file=sys.stderr)
         sys.exit(1)
+
+
+def describe_shell_command(client, model, description_prompt, command):
+    """Describe the generated shell command."""
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": description_prompt},
+                {"role": "user", "content": f"Analyze this shell command: {command}"}
+            ],
+            max_tokens=150,
+            temperature=0.1
+        )
+
+        assessment = response.choices[0].message.content.strip()
+        return assessment
+
+    except Exception as e:
+        print(f"Error assessing command: {e}", file=sys.stderr)
+        return "UNKNOWN: Unable to assess command"
 
 
 def main():
@@ -197,13 +220,17 @@ def main():
     args = parser.parse_args()
 
     # Initialize client
-    client, model, system_prompt = get_client()
+    client, model, system_prompt, description_prompt = get_client()
 
     # Generate command
     command = generate_shell_command(client, model, system_prompt, args.description)
 
     # Output the command
     print(command)
+
+    # Describe the shell command
+    description = describe_shell_command(client, model, description_prompt, command)
+    print(description)
 
 
 if __name__ == '__main__':
